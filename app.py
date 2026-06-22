@@ -11,11 +11,58 @@ from markitdown import MarkItDown
 import google.generativeai as genai
 from google.api_core import exceptions
 
-# Configure Streamlit page layout
-st.set_page_config(page_title="AI PO Processing Suite", layout="centered")
+# Configure Streamlit page layout with a premium sidebar state
+st.set_page_config(
+    page_title="Enterprise PO Engine", 
+    page_icon="📦",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-st.title("📦 Enterprise Purchase Order Processing Engine")
-st.subheader("Upload raw PO sheets, PDFs, or a compressed .ZIP file archive")
+# Premium Custom UI Element Injector (CSS)
+st.markdown("""
+    <style>
+    /* Styling the main title header */
+    .main-title {
+        font-size: 2.6rem !important;
+        font-weight: 800 !important;
+        background: linear-gradient(45deg, #00FFB2, #00BFFF);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.2rem;
+    }
+    .sub-title {
+        font-size: 1.1rem !important;
+        color: #8B949E !important;
+        margin-bottom: 2rem;
+    }
+    /* Card design for metrics summary */
+    .metric-card {
+        background-color: #161B22;
+        border: 1px solid #30363D;
+        border-radius: 12px;
+        padding: 1.25rem;
+        text-align: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .metric-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #00FFB2;
+        margin-bottom: 0.25rem;
+    }
+    .metric-label {
+        font-size: 0.85rem;
+        color: #8B949E;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Render Beautiful Headings
+st.markdown('<h1 class="main-title">📦 Enterprise PO Processing Engine</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Securely upload raw procurement sheets, contract PDFs, or a compressed .ZIP transaction matrix</p>', unsafe_allow_html=True)
 
 # SECURELY FETCH KEY 
 try:
@@ -85,12 +132,12 @@ OUTPUT EXACTLY IN THIS FLAT JSON SCHEMA (NO LINE ITEMS ARRAY):
 # INTERFACE & FILE UPLOAD LAYOUT
 # ==========================================
 uploaded_files = st.file_uploader(
-    "Drag and drop PDFs, Excels, or a single .ZIP folder package", 
+    "Drag and drop documents directly into the parsing gate:", 
     type=["pdf", "xlsx", "xls", "zip"], 
     accept_multiple_files=True
 )
 
-if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_width=True):
+if uploaded_files and st.button("🚀 Run Cloud Production Pipeline", use_container_width=True):
     
     # Initialize Core API Parameters Securely
     genai.configure(api_key=api_key)
@@ -109,7 +156,6 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
         if filename.lower().endswith('.zip'):
             with zipfile.ZipFile(io.BytesIO(uploaded_file.read())) as z:
                 for file_info in z.infolist():
-                    # Filter internal system files
                     if file_info.is_dir() or file_info.filename.startswith('__MACOSX') or os.path.basename(file_info.filename).startswith('.'):
                         continue
                     
@@ -129,7 +175,7 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
                 })
 
     if not file_groups:
-        st.error("No valid PDF or Excel transactional sheets discovered inside the payload structure.")
+        st.error("❌ Operational Fault: No valid transactions discovered inside the drop bundle.")
         st.stop()
 
     master_data = []
@@ -143,27 +189,24 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
 
     # Process Transaction Groups Loops
     for idx, (base_name, target_files) in enumerate(file_groups.items()):
-        status_text.text(f"Extracting Group Data ({idx+1}/{total_groups}): {base_name}...")
+        status_text.markdown(f"⚙️ **Processing Matrix Group:** `{base_name}` ({idx+1}/{total_groups})...")
         
         combined_text = ""
         for file_obj in target_files:
             combined_text += f"\n--- CONTENTS OF {file_obj['name']} ---\n"
             try:
-                # Use secure temporary file structures
                 with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_obj["name"])[1]) as temp_file:
                     temp_file.write(file_obj['bytes'])
                     temp_path = temp_file.name
                 
                 extension = os.path.splitext(file_obj["name"])[1].lower()
 
-                # Let MarkItDown unify conversion matrices cleanly
                 if extension in [".pdf", ".xlsx", ".xls"]:
                     extracted = md.convert(temp_path)
                     combined_text += extracted.text_content
                 else:
                     combined_text += f"\n[Unsupported file type: {extension}]\n"
                 
-                # Cleanup safely
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 
@@ -182,7 +225,6 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
             clean_response = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_response)
             
-            # Capture Discrepancy Reporting Payload
             if data.get("discrepancy_found"):
                 discrepancy_report.append({
                     "PO Number": data.get("po_number", base_name),
@@ -190,7 +232,6 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
                     "Issue": data.get("discrepancy_details")
                 })
                 
-            # Capture Missing Information Reporting Payload
             if not data.get("contact_number") or not data.get("email_id"):
                 missing_info_report.append({
                     "PO Number": data.get("po_number", base_name),
@@ -224,7 +265,8 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
         progress_bar.progress((idx + 1) / total_groups)
         time.sleep(4) # Pacing cadence throttle
 
-    status_text.text("Extraction runtime executed. Building validation matrices...")
+    status_text.empty()
+    progress_bar.empty()
 
     # ==========================================
     # VALIDATION, COMPILATION & EXCEL COMPILING
@@ -232,7 +274,6 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
     if master_data:
         master_df = pd.DataFrame(master_data)
         
-        # Calculate strict math validation flags matching your original script layout
         master_df['Math Valid'] = master_df.apply(
             lambda x: pd.isna(x['Total Amount']) or 
                       round((pd.to_numeric(x['Basic Amount'], errors='coerce') or 0) + 
@@ -241,7 +282,6 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
             axis=1
         )
         
-        # Deduplicate and scrub empty values matching original constraints
         master_df.drop_duplicates(subset=['PO Number'], keep='first', inplace=True)
         master_df.dropna(subset=['PO Number'], inplace=True)
 
@@ -251,42 +291,38 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
         ]
         master_df = master_df.reindex(columns=clean_target_columns)
 
-        # Build Summary Report Data block structures
-        summary_data = {
-            "Metric": [
-                "Total PO Groups Processed", 
-                "Total Flat Rows Exported",
-                "POs with Missing Contact/Email",
-                "POs with PDF/Excel Discrepancies"
-            ],
-            "Count": [
-                processed_count,
-                len(master_df),
-                len(missing_info_report),
-                len(discrepancy_report)
-            ]
-        }
-        summary_df = pd.DataFrame(summary_data)
+        # 🚀 REVENUE & VALIDATION HIGH-END METRICS GRID
+        st.markdown("---")
+        st.markdown("### 📊 Operational Summary Matrix")
+        
+        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+        with m_col1:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{processed_count}</div><div class="metric-label">Processed</div></div>', unsafe_allow_html=True)
+        with m_col2:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{len(master_df)}</div><div class="metric-label">Rows Exported</div></div>', unsafe_allow_html=True)
+        with m_col3:
+            st.markdown(f'<div class="metric-card"><div class="metric-value" style="color: #FFAD33;">{len(missing_info_report)}</div><div class="metric-label">Missing Fields</div></div>', unsafe_allow_html=True)
+        with m_col4:
+            st.markdown(f'<div class="metric-card"><div class="metric-value" style="color: #FF4D4D;">{len(discrepancy_report)}</div><div class="metric-label">Discrepancies</div></div>', unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Package data into structured Excel spreadsheet buffer stream
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             master_df.to_excel(writer, sheet_name='Master PO Data', index=False)
             pd.DataFrame(missing_info_report).to_excel(writer, sheet_name='Missing Info Report', index=False)
             pd.DataFrame(discrepancy_report).to_excel(writer, sheet_name='Discrepancies', index=False)
-            summary_df.to_excel(writer, sheet_name='Validation Summary', index=False)
-        
-        st.success("🎉 Comprehensive Verification Log Compiled Successfully!")
         
         st.download_button(
-            label="📥 Download Structured Excel Report Package",
+            label="📥 Download Cleaned Excel Production Ledger",
             data=buffer.getvalue(),
             file_name="Structured_PO_Report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
         
-        st.subheader("Data Preview (Master PO Data)")
-        st.dataframe(master_df)
+        # Display Preview
+        with st.expander("🔍 View Extracted Ledger Preview", expanded=True):
+            st.dataframe(master_df, use_container_width=True)
     else:
-        st.error("No records could be extracted due to systemic context drops or configuration failures.")
+        st.error("No data elements could be compiled from this specific stream.")
