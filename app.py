@@ -149,31 +149,26 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
         for file_obj in target_files:
             combined_text += f"\n--- CONTENTS OF {file_obj['name']} ---\n"
             try:
-                temp_path = f"temp_{file_obj['name']}"
-                with open(temp_path, "wb") as temp_file:
+                # Use secure temporary file structures
+                with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_obj["name"])[1]) as temp_file:
                     temp_file.write(file_obj['bytes'])
+                    temp_path = temp_file.name
                 
                 extension = os.path.splitext(file_obj["name"])[1].lower()
 
-                if extension == ".pdf":
+                # Let MarkItDown unify conversion matrices cleanly
+                if extension in [".pdf", ".xlsx", ".xls"]:
                     extracted = md.convert(temp_path)
                     combined_text += extracted.text_content
-
-                elif extension == ".xlsx":
-                    df = pd.read_excel(temp_path, engine="openpyxl")
-                    combined_text += df.to_markdown(index=False)
-
-                elif extension == ".xls":
-                    df = pd.read_excel(temp_path, engine="xlrd")
-                    combined_text += df.to_markdown(index=False)
-
                 else:
                     combined_text += f"\n[Unsupported file type: {extension}]\n"
                 
-                os.remove(temp_path)
+                # Cleanup safely
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
                 
             except Exception as e:
-                st.error(f"Failed: {file_obj['name']}")
+                st.error(f"Failed to process file frame: {file_obj['name']}")
                 st.exception(e)
                 combined_text += f"[Error processing tracking layers: {e}]"
 
