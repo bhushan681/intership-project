@@ -1,0 +1,6 @@
+streamlit
+pandas
+markitdown
+google-generativeai
+openpyxl
+pathspec
