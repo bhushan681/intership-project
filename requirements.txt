@@ -4,3 +4,4 @@ google-generativeai
 openpyxl
 pathspec
 markitdown
+xlrd
