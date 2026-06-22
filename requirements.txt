@@ -4,9 +4,10 @@ google-generativeai
 openpyxl
 pathspec
 
-markitdown[pdf]
+markitdown[pdf,xls]
 
 pymupdf
 pdfplumber
 pypdf
 pdfminer.six
+xlard
