@@ -248,6 +248,7 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
     discrepancy_report = []
     missing_info_report = []
     processed_count = 0
+    quota_exhausted_flag = False  # Track limit events cleanly
 
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -320,7 +321,7 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
             processed_count += 1
 
         except exceptions.ResourceExhausted:
-            st.error(f"⚠️ **API Quota Exhausted!** Rate limit encountered. Pipeline paused at transaction {base_name}.")
+            quota_exhausted_flag = True
             break
         except exceptions.GoogleAPICallError as api_err:
             st.error(f"⚠️ **API Gateway Fault:** {api_err.message}")
@@ -333,6 +334,14 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
 
     status_text.empty()
     progress_bar.empty()
+
+    # 🛑 DISPLAY REFORMATTED QUOTA FINISHED POPUP ALERT BOX
+    if quota_exhausted_flag:
+        st.error("""
+            🛑 **Daily Quota is Finished!** The processing system has paused because the allowed daily operational extraction limit has been reached.  
+            
+            * **Note:** Any transactions that were successfully handled prior to this event have been securely compiled in the spreadsheet ledger below so that your work context remains safe.
+        """)
 
     # ==========================================
     # VALIDATION, COMPILATION & EXCEL COMPILING
@@ -389,4 +398,5 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
         with st.expander("🔍 View Extracted Master PO Data Preview", expanded=True):
             st.dataframe(master_df, use_container_width=True)
     else:
-        st.error("No records could be extracted due to systemic context drops or configuration failures.")
+        if not quota_exhausted_flag:
+            st.error("No records could be extracted due to systemic context drops or configuration failures.")
