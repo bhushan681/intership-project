@@ -3,25 +3,27 @@ import pandas as pd
 import json
 import time
 import os
+import io
+import zipfile
 from collections import defaultdict
 from markitdown import MarkItDown
 import google.generativeai as genai
 from google.api_core import exceptions
 
 # Configure Streamlit page layout
-st.set_page_config(page_title="AI PO Extraction Portal", layout="centered")
+st.set_page_config(page_title="AI PO Processing Suite", layout="centered")
 
-st.title("📦 Purchase Order Extraction Portal")
-st.subheader("Upload PO documents to extract validated structural data")
+st.title("📦 Enterprise Purchase Order Processing Engine")
+st.subheader("Upload raw PO sheets, PDFs, or a compressed .ZIP file archive")
 
-# SECURELY FETCH KEY (No user inputs shown)
+# SECURELY FETCH KEY 
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except KeyError:
     st.error("🔒 Configuration Error: App API key not found in cloud setup.")
     st.stop()
 
-# Initialize MarkItDown in-memory helper
+# Initialize MarkItDown globally
 md = MarkItDown()
 
 # ==========================================
@@ -79,55 +81,84 @@ OUTPUT EXACTLY IN THIS FLAT JSON SCHEMA (NO LINE ITEMS ARRAY):
 """
 
 # ==========================================
-# INTERFACE & FILE UPLOAD
+# INTERFACE & FILE UPLOAD LAYOUT
 # ==========================================
 uploaded_files = st.file_uploader(
-    "Drag and drop your PO PDFs or Excel Files here", 
-    type=["pdf", "xlsx", "xls"], 
+    "Drag and drop PDFs, Excels, or a single .ZIP folder package", 
+    type=["pdf", "xlsx", "xls", "zip"], 
     accept_multiple_files=True
 )
 
-if uploaded_files and st.button("🚀 Start Data Extraction", use_container_width=True):
-    # Configure Gemini Client securely
+if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_width=True):
+    
+    # Initialize Core API Parameters Securely
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(
         'gemini-flash-lite-latest',
         generation_config={"response_mime_type": "application/json"}
     )
 
-    # Group uploaded files by their base filename
+    # In-Memory Extraction & Grouping Mapping Dictionary
     file_groups = defaultdict(list)
+    
+    # Check if a ZIP payload was provided
     for uploaded_file in uploaded_files:
-        base_name, _ = os.path.splitext(uploaded_file.name)
-        file_groups[base_name].append(uploaded_file)
+        filename = uploaded_file.name
+        
+        if filename.lower().endswith('.zip'):
+            with zipfile.ZipFile(io.BytesIO(uploaded_file.read())) as z:
+                for file_info in z.infolist():
+                    # Filter internal system files
+                    if file_info.is_dir() or file_info.filename.startswith('__MACOSX') or os.path.basename(file_info.filename).startswith('.'):
+                        continue
+                    
+                    if file_info.filename.lower().endswith(('.pdf', '.xlsx', '.xls')):
+                        file_bytes = z.read(file_info.filename)
+                        base_name = os.path.splitext(os.path.basename(file_info.filename))[0]
+                        file_groups[base_name].append({
+                            "name": os.path.basename(file_info.filename),
+                            "bytes": file_bytes
+                        })
+        else:
+            if filename.lower().endswith(('.pdf', '.xlsx', '.xls')):
+                base_name = os.path.splitext(filename)[0]
+                file_groups[base_name].append({
+                    "name": filename,
+                    "bytes": uploaded_file.getvalue()
+                })
+
+    if not file_groups:
+        st.error("No valid PDF or Excel transactional sheets discovered inside the payload structure.")
+        st.stop()
 
     master_data = []
     discrepancy_report = []
     missing_info_report = []
+    processed_count = 0
 
     progress_bar = st.progress(0)
     status_text = st.empty()
-    
     total_groups = len(file_groups)
 
-    for idx, (base_name, files) in enumerate(file_groups.items()):
-        status_text.text(f"Processing group ({idx+1}/{total_groups}): {base_name}...")
+    # Process Transaction Groups Loops
+    for idx, (base_name, target_files) in enumerate(file_groups.items()):
+        status_text.text(f"Extracting Group Data ({idx+1}/{total_groups}): {base_name}...")
         
         combined_text = ""
-        for f in files:
-            combined_text += f"\n--- CONTENTS OF {f.name} ---\n"
+        for file_obj in target_files:
+            combined_text += f"\n--- CONTENTS OF {file_obj['name']} ---\n"
             try:
-                temp_path = f"temp_{f.name}"
+                temp_path = f"temp_{file_obj['name']}"
                 with open(temp_path, "wb") as temp_file:
-                    temp_file.write(f.getvalue())
+                    temp_file.write(file_obj['bytes'])
                 
                 extracted = md.convert(temp_path)
                 combined_text += extracted.text_content
                 os.remove(temp_path)
             except Exception as e:
-                combined_text += f"[Error reading file: {e}]"
+                combined_text += f"[Error processing tracking layers: {e}]"
 
-        # AI Extraction with Guardrails for Limits
+        # Safe AI Extraction Handling Pipeline
         try:
             response = model.generate_content(
                 SYSTEM_INSTRUCTION + "\n\n" + combined_text,
@@ -137,12 +168,15 @@ if uploaded_files and st.button("🚀 Start Data Extraction", use_container_widt
             clean_response = response.text.replace("```json", "").replace("```", "").strip()
             data = json.loads(clean_response)
             
+            # Capture Discrepancy Reporting Payload
             if data.get("discrepancy_found"):
                 discrepancy_report.append({
                     "PO Number": data.get("po_number", base_name),
-                    "Files Checked": ", ".join([f.name for f in files]),
+                    "Files Checked": ", ".join([f['name'] for f in target_files]),
                     "Issue": data.get("discrepancy_details")
                 })
+                
+            # Capture Missing Information Reporting Payload
             if not data.get("contact_number") or not data.get("email_id"):
                 missing_info_report.append({
                     "PO Number": data.get("po_number", base_name),
@@ -162,47 +196,83 @@ if uploaded_files and st.button("🚀 Start Data Extraction", use_container_widt
                 "Tax Amount": data.get("tax_amount"),
                 "Total Amount": data.get("total_amount")
             })
+            processed_count += 1
 
         except exceptions.ResourceExhausted:
-            st.error(f"⚠️ **API Limit Reached!** Rate limits hit. Please wait a minute before processing remaining items.")
+            st.error(f"⚠️ **API Quota Exhausted!** Rate limit encountered. Pipeline paused at transaction {base_name}.")
             break
         except exceptions.GoogleAPICallError as api_err:
-            st.error(f"⚠️ **Gemini Server Error:** {api_err.message}")
+            st.error(f"⚠️ **API Gateway Fault:** {api_err.message}")
             break
         except Exception as e:
-            st.warning(f"Failed parsing group {base_name}: {e}")
+            st.warning(f"Skipping extraction for execution frame {base_name}: {e}")
 
         progress_bar.progress((idx + 1) / total_groups)
-        time.sleep(4)  # Cooldown pacing to avoid spamming the API
+        time.sleep(4) # Pacing cadence throttle
 
-    status_text.text("Extraction completed.")
+    status_text.text("Extraction runtime executed. Building validation matrices...")
 
     # ==========================================
-    # BUILD EXCEL EXPORT AFTER COMPLETION
+    # VALIDATION, COMPILATION & EXCEL COMPILING
     # ==========================================
     if master_data:
         master_df = pd.DataFrame(master_data)
+        
+        # Calculate strict math validation flags matching your original script layout
+        master_df['Math Valid'] = master_df.apply(
+            lambda x: pd.isna(x['Total Amount']) or 
+                      round((pd.to_numeric(x['Basic Amount'], errors='coerce') or 0) + 
+                            (pd.to_numeric(x['Tax Amount'], errors='coerce') or 0), 2) == 
+                      round(pd.to_numeric(x['Total Amount'], errors='coerce'), 2), 
+            axis=1
+        )
+        
+        # Deduplicate and scrub empty values matching original constraints
         master_df.drop_duplicates(subset=['PO Number'], keep='first', inplace=True)
         master_df.dropna(subset=['PO Number'], inplace=True)
-        
-        clean_target_columns = ["PO Number", "PO Date", "Site", "Vendor Name", "Contact Number", "Email ID", "Basic Amount", "Tax Amount", "Total Amount"]
+
+        clean_target_columns = [
+            "PO Number", "PO Date", "Site", "Vendor Name", "Contact Number", 
+            "Email ID", "Basic Amount", "Tax Amount", "Total Amount", "Math Valid"
+        ]
         master_df = master_df.reindex(columns=clean_target_columns)
 
-        output_filename = "extracted_po_report.xlsx"
-        import io
+        # Build Summary Report Data block structures
+        summary_data = {
+            "Metric": [
+                "Total PO Groups Processed", 
+                "Total Flat Rows Exported",
+                "POs with Missing Contact/Email",
+                "POs with PDF/Excel Discrepancies"
+            ],
+            "Count": [
+                processed_count,
+                len(master_df),
+                len(missing_info_report),
+                len(discrepancy_report)
+            ]
+        }
+        summary_df = pd.DataFrame(summary_data)
+
+        # Package data into structured Excel spreadsheet buffer stream
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             master_df.to_excel(writer, sheet_name='Master PO Data', index=False)
             pd.DataFrame(missing_info_report).to_excel(writer, sheet_name='Missing Info Report', index=False)
             pd.DataFrame(discrepancy_report).to_excel(writer, sheet_name='Discrepancies', index=False)
+            summary_df.to_excel(writer, sheet_name='Validation Summary', index=False)
         
-        st.success("🎉 Processing Complete! Data is ready for download.")
+        st.success("🎉 Comprehensive Verification Log Compiled Successfully!")
+        
         st.download_button(
-            label="📥 Download Processed Excel File",
+            label="📥 Download Structured Excel Report Package",
             data=buffer.getvalue(),
-            file_name=output_filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_name="Structured_PO_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
+        
+        st.subheader("Data Preview (Master PO Data)")
         st.dataframe(master_df)
     else:
-        st.error("No valid PO Data structural layers could be extracted.")
+        st.error("No records could be extracted due to systemic context drops or configuration failures.")
