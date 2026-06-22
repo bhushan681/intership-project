@@ -1,6 +1,7 @@
 streamlit
 pandas
-markitdown
 google-generativeai
 openpyxl
 pathspec
+markitdown
+pdfminer.six
