@@ -5,6 +5,7 @@ import time
 import os
 import io
 import zipfile
+import tempfile
 from collections import defaultdict
 from markitdown import MarkItDown
 import google.generativeai as genai
@@ -156,7 +157,9 @@ if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_
                 combined_text += extracted.text_content
                 os.remove(temp_path)
             except Exception as e:
-                combined_text += f"[Error processing tracking layers: {e}]"
+                st.error(f"Failed: {file_obj['name']}")
+                st.exception(e)
+            combined_text += f"[Error processing tracking layers: {e}]"
 
         # Safe AI Extraction Handling Pipeline
         try:
