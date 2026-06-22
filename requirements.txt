@@ -3,5 +3,4 @@ pandas
 google-generativeai
 openpyxl
 pathspec
-
-"markitdown[all]"
+markitdown
