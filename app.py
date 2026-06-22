@@ -114,7 +114,7 @@ st.markdown("""
     <div class="executive-banner">
         <div class="banner-title-container">
             <div class="banner-icon">⬢</div>
-            <h1 class="banner-title">Enterprise PO Processing Suite</h1>
+            <h1 class="banner-title">Enterprise PO Processing</h1>
         </div>
         <p class="banner-subtitle">Intelligent extraction and validation of purchase orders from PDFs, Excel sheets, and ZIP archives</p>
         <div class="banner-underline"></div>
