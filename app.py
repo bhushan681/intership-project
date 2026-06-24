@@ -203,7 +203,7 @@ uploaded_files = st.file_uploader(
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-if uploaded_files and st.button("🚀 Start Production Pipeline", use_container_width=True):
+if uploaded_files and st.button(" Start processing", use_container_width=True):
     
     # Initialize Core API Parameters Securely
     genai.configure(api_key=api_key)
