@@ -3,5 +3,5 @@ pandas
 google-generativeai
 openpyxl
 pathspec
-markitdown[pdf]
+markitdown[all]
 xlrd
